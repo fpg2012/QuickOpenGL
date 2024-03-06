@@ -1,5 +1,4 @@
 #pragma once
-
 #include <glm/glm.hpp>
 
 #include "config.h"
@@ -12,7 +11,7 @@ struct Camera {
 	glm::vec3 look_at = glm::vec3(.0f, .0f, .0f);
 
 	glm::mat4 project() const {
-		return glm::perspective(fovy, aspect, 0.1f, 100.0f);
+		return glm::perspective(fovy, aspect, 1.0f, 100.0f);
 	}
 
 	glm::mat4 view() const {

@@ -39,7 +39,7 @@ public:
 		}
 	}
 private:
-	void init(const char*& source, GLenum type) {
+	void init(const char* source, GLenum type) {
 		handle = glCreateShader(type);
 
 		glShaderSource(handle, 1, &source, NULL);

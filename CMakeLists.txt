@@ -15,7 +15,7 @@ add_subdirectory("glfw")
 include_directories("glad/include")
 set(GLAD_SRC "glad/src/glad.c")
 
-set(MY_HEADERS shader.hpp utils.hpp shape.hpp config.h utils.hpp camera.hpp)
+set(MY_HEADERS shader.hpp utils.hpp shape.hpp config.h utils.hpp camera.hpp material.hpp light.hpp texture.hpp)
 
 add_subdirectory("glm")
 

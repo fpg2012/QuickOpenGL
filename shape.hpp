@@ -10,19 +10,18 @@
 #include "shader.hpp"
 #include "texture.hpp"
 #include "camera.hpp"
+#include "material.hpp"
 #include "utils.hpp"
 
 
 class ShapeObject { 
 public:
-	std::shared_ptr<ShaderProgram> shader_program = nullptr;
-	glm::mat4 model = glm::mat4(1.0f); 
-	std::shared_ptr<Texture> texture = nullptr;
+	glm::mat4 model = glm::mat4(1.0f);
 
-	ShapeObject(std::shared_ptr<ShaderProgram> shader = nullptr, std::shared_ptr<Texture> texture = nullptr) : shader_program(shader), texture(texture) {
+	ShapeObject() {
 
 	}
-	virtual void draw(const Camera &cam) {
+	virtual void draw(const Camera &cam, std::shared_ptr<Material> material) {
 
 	} 
 };
@@ -32,7 +31,7 @@ public:
 	std::array<float, 9> vertices; 
 	GLuint vbo, vao;
 
-	Triangle(const std::array<Point3f, 3>& points, std::shared_ptr<ShaderProgram> shader) : ShapeObject(shader) {
+	Triangle(const std::array<Point3f, 3>& points) {
 		for (int i = 0; i < 3; ++i) {
 			vertices[i * 3] = points[i].x;
 			vertices[i * 3 + 1] = points[i].y;
@@ -50,16 +49,8 @@ public:
 		glEnableVertexAttribArray(0);
 	}
 
-	void draw(const Camera& cam) override {
-		// location, size, type, normalize, stride, offset
-		assert(shader_program != nullptr);
-		shader_program->use();
-		GLuint location = glGetUniformLocation(shader_program->handle, "model");
-		glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(model));
-		location = glGetUniformLocation(shader_program->handle, "view");
-		glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(cam.view()));
-		location = glGetUniformLocation(shader_program->handle, "project");
-		glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(cam.project()));
+	void draw(const Camera& cam, std::shared_ptr<Material> material) override {
+		material->apply(model, cam);
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 	}
@@ -70,10 +61,8 @@ public:
 	std::vector<float> vertices;
 	std::vector<GLuint> indices;
 	GLuint vbo, vao, ebo;
-	std::shared_ptr<PointLight> light;
-	PhongMaterial material;
 
-	Sphere(std::shared_ptr<ShaderProgram> shader, float r = 1.0f, std::shared_ptr<Texture> texture = nullptr) : ShapeObject(shader, texture) {
+	Sphere(float r = 1.0f) {
 		float pi = glm::pi<float>();
 		int m_step = 50;
 		float step = 2 * pi / m_step;
@@ -98,7 +87,7 @@ public:
 				vertices.push_back(y);
 				vertices.push_back(z);
 				vertices.push_back((float)j / m_step);
-				vertices.push_back((step * i) / pi);
+				vertices.push_back(1.0f - (step * i) / pi);
 				vertices.push_back(x/r);
 				vertices.push_back(y/r);
 				vertices.push_back(z/r);
@@ -136,36 +125,8 @@ public:
 		glEnableVertexAttribArray(2);
 	}
 
-	void draw(const Camera &cam) override {
-		if (texture != nullptr) {
-			texture->use();
-		}
-
-		assert(shader_program != nullptr);
-		shader_program->use();
-
-		GLuint location = glGetUniformLocation(shader_program->handle, "model");
-		glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(model));
-		location = glGetUniformLocation(shader_program->handle, "view");
-		glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(cam.view()));
-		location = glGetUniformLocation(shader_program->handle, "project");
-		glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(cam.project()));
-		location = glGetUniformLocation(shader_program->handle, "light.position");
-		glUniform3fv(location, 1, glm::value_ptr(light->position));
-		location = glGetUniformLocation(shader_program->handle, "light.color");
-		glUniform3fv(location, 1, glm::value_ptr(light->color));
-		location = glGetUniformLocation(shader_program->handle, "light.intensity");
-		glUniform1fv(location, 1, &light->intensity);
-		location = glGetUniformLocation(shader_program->handle, "material.k_ambient");
-		glUniform1fv(location, 1, &material.k_ambient);
-		location = glGetUniformLocation(shader_program->handle, "material.k_diffuse");
-		glUniform1fv(location, 1, &material.k_diffuse);
-		location = glGetUniformLocation(shader_program->handle, "material.k_specular");
-		glUniform1fv(location, 1, &material.k_specular);
-		location = glGetUniformLocation(shader_program->handle, "material.phong_exponent");
-		glUniform1fv(location, 1, &material.phong_exponent);
-		location = glGetUniformLocation(shader_program->handle, "eye");
-		glUniform3fv(location, 1, glm::value_ptr(cam.pos));
+	void draw(const Camera &cam, std::shared_ptr<Material> material) override {
+		material->apply(model, cam);
 
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
