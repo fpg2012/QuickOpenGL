@@ -8,7 +8,14 @@
 #include "light.hpp"
 
 struct Material {
+	enum AlphaMode {
+		OPAQUE = 0,
+		MASK = 1,
+		BLEND = 2,
+	};
+	Material(AlphaMode alpha_mode = OPAQUE) : alpha_mode(alpha_mode) { }
 	virtual void apply(glm::mat4 model, const Camera& cam) = 0;
+	AlphaMode alpha_mode = OPAQUE;
 };
 
 struct SimpleColorMaterial : Material {
@@ -49,17 +56,29 @@ struct PhongMaterial : Material {
 	std::shared_ptr<Texture> texture;
 	std::shared_ptr<Texture> shadow_map;
 	std::shared_ptr<PointLight> light;
+	static inline std::shared_ptr<ShaderProgram> default_shader_program = nullptr;
 
-	PhongMaterial(std::shared_ptr<ShaderProgram> shader_program, std::shared_ptr<Texture> texture, std::shared_ptr<PointLight> light,
+	PhongMaterial(
+		std::shared_ptr<ShaderProgram> shader_program, 
+		std::shared_ptr<Texture> texture, 
+		std::shared_ptr<PointLight> light,
+		std::shared_ptr<Texture> shadow_map = nullptr,
+		AlphaMode alpha_mode = Material::OPAQUE,
 		float phong_exponent = 32.0f, float k_ambient = .2f, float k_diffuse = 1.0f, float k_specular = 0.5f)
-		: shader_program(shader_program), texture(texture), light(light), phong_exponent(phong_exponent), k_ambient(k_ambient), k_diffuse(k_diffuse), k_specular(k_specular)
+	: shader_program(shader_program), texture(texture), light(light), shadow_map(shadow_map),
+		phong_exponent(phong_exponent), k_ambient(k_ambient), k_diffuse(k_diffuse), k_specular(k_specular),
+		Material(alpha_mode)
 	{
-
+		if (shader_program == nullptr && default_shader_program == nullptr) {
+			this->shader_program = load_shader();
+		}
 	}
 
 	virtual void apply(glm::mat4 model, const Camera &cam) override {
 		texture->use(GL_TEXTURE0);
-		shadow_map->use(GL_TEXTURE1);
+		if (shadow_map) {
+			shadow_map->use(GL_TEXTURE1);
+		}
 		
 		assert(shader_program != nullptr);
 		shader_program->use();
@@ -92,5 +111,19 @@ struct PhongMaterial : Material {
 		glUniform1i(location, 0);
 		location = glGetUniformLocation(shader_program->handle, "shadowMap");
 		glUniform1i(location, 1);
+		location = glGetUniformLocation(shader_program->handle, "zNear");
+		glUniform1f(location, light->light_cam.zNear);
+		location = glGetUniformLocation(shader_program->handle, "zFar");
+		glUniform1f(location, light->light_cam.zFar);
+		location = glGetUniformLocation(shader_program->handle, "lightSize");
+		glUniform1f(location, 1.0f);
+		location = glGetUniformLocation(shader_program->handle, "recvShadow");
+		glUniform1i(location, (shadow_map == nullptr ? 0 : 1));
+	}
+
+	static std::shared_ptr<ShaderProgram> load_shader() {
+		Shader vert("shader.vert", GL_VERTEX_SHADER);
+		Shader frag("shader.frag", GL_FRAGMENT_SHADER);
+		return std::make_shared<ShaderProgram>(vert, frag);
 	}
 };

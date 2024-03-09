@@ -17,10 +17,6 @@ vec3 blinnPhong(Material material, PointLight light, vec3 normal, vec3 pos, vec3
     vec3 view_dire = normalize(eye - pos);
     vec3 light_dire = normalize(light.position - pos);
 
-    if (abs(dot(normal, light_dire)) < 0.01) {
-        return vec3(1.0f, 1.0f, 0.0f);    
-    }
-
     vec3 ambient = light.color;
     vec3 diffuse = max(0.0f, dot(light_dire, normal)) * light.color;
 
@@ -36,36 +32,57 @@ out vec4 FragColor;
 in vec3 pos;
 in vec2 texCoord;
 in vec3 normal;
-in vec4 pos_light_space;
+in vec3 pos_light_space;
 
 uniform sampler2D ourTexture;
 uniform sampler2D shadowMap;
 uniform PointLight light;
 uniform Material material;
 uniform vec3 eye;
+uniform float zNear;
+uniform float zFar;
+uniform float lightSize;
+uniform int recvShadow;
 
-float compareDepth(vec2 coord, float current_depth) {
+float realDepth(float depth) {
+    return 1 / (depth * (1/zFar - 1/zNear) + 1/zNear);
+}
+
+float compareDepth(vec2 coord, float current_depth, float bias) {
     float closest_depth = texture(shadowMap, coord).r;
-    float shadow = closest_depth + 0.01f < current_depth ? 1.0f : .0f;
+    float shadow = closest_depth + bias < current_depth ? 1.0f : .0f;
     return shadow;
 }
 
-float shadowCalc(vec4 p_light_space) {
-    vec3 p = p_light_space.xyz / p_light_space.w;
+float blockerDepth(vec2 coord, float current_depth, float bias) {
+    float closest_depth = texture(shadowMap, coord).r;
+    float blocker_depth = closest_depth + bias < current_depth ? realDepth(closest_depth) : .0f;
+    return blocker_depth;
+}
+
+float shadowCalc(vec3 p_light_space, float bias) {
+    vec3 p = p_light_space;
     p = p * 0.5 + 0.5; // NDC [-1, 1] -> [0, 1]
     float current_depth = p.z;
-    
-    float shadow0 = compareDepth(p.xy, current_depth) * 0.4;
-    float shadow1 = compareDepth(p.xy + vec2(1.0f / 1024, 1.0f / 1024), current_depth) * 0.4 * 0.25;
-    float shadow2 = compareDepth(p.xy + vec2(1.0f / 1024, -1.0f / 1024), current_depth) * 0.4 * 0.25;
-    float shadow3 = compareDepth(p.xy + vec2(-1.0f / 1024, 1.0f / 1024), current_depth) * 0.4 * 0.25;
-    float shadow4 = compareDepth(p.xy + vec2(-1.0f / 1024, -1.0f / 1024), current_depth) * 0.4 * 0.25;
-    float shadow5 = compareDepth(p.xy + vec2(2.0f / 1024, .0f / 1024), current_depth) * 0.2 * 0.25;
-    float shadow6 = compareDepth(p.xy + vec2(.0f / 1024, -2.0f / 1024), current_depth) * 0.2 * 0.25;
-    float shadow7 = compareDepth(p.xy + vec2(-2.0f / 1024, .0f / 1024), current_depth) * 0.2 * 0.25;
-    float shadow8 = compareDepth(p.xy + vec2(.0f / 1024, 2.0f / 1024), current_depth) * 0.2 * 0.25;
 
-    float shadow = (shadow0 + shadow1 + shadow2 + shadow3 + shadow4 + shadow5 + shadow6 + shadow7 + shadow8);
+    float shadow = 0.0f;
+    // shadow = compareDepth(p.xy, current_depth, bias);
+
+    int sample_steps = 5;
+    float step_size = 10.0f / 1024 / (sample_steps * 2);
+    int cnt = 0;
+
+    float weight = 0.0f;
+    for (int i = -sample_steps; i <= sample_steps; i++) {
+        int max_j = int(sqrt(sample_steps * sample_steps - i*i));
+        for (int j = -max_j; j <= max_j; j++) {
+                float w = sample_steps - i + sample_steps - j; w = pow(w, 3.0f);
+                shadow += compareDepth(vec2(i * step_size, j * step_size) + p.xy, current_depth, bias) * w;
+                weight += w;
+            // cnt += (i*i + j*j < 16 ? 1 : 0);
+        }
+    }
+    shadow /= weight;
 
     return shadow;
 }
@@ -73,11 +90,23 @@ float shadowCalc(vec4 p_light_space) {
 void main()
 {
     vec4 color = texture(ourTexture, texCoord);
-    vec3 color3 = color.rgb;
-    float shadow = shadowCalc(pos_light_space);
-    vec3 phong_color = blinnPhong(material, light, normalize(normal), pos, eye, color3, shadow);
-    // FragColor = color;
-    FragColor = vec4(phong_color, 1.0);
+    vec3 light_dire = normalize(light.position - pos);
+
+    // if (abs(dot(normalize(normal), light_dire)) < 0.01) {
+    //     FragColor = vec4(1.0f, 1.0f, 0.0f, 1.0f);
+    //     return;  
+    // }
+    // if (color.w < 0.9f) {
+    //     gl_FragDepth = 1.0f;
+    // }
+    float shadow = 0.0f;
+    float bias = 0.0005f;  
+    if (recvShadow != 0) {
+        shadow = shadowCalc(pos_light_space, bias);
+    }
+    vec3 phong_color = blinnPhong(material, light, normalize(normal), pos, eye, color.rgb, shadow);
+    FragColor = vec4((1.5 - shadow) * color.rgb, color.w);
+    // FragColor = vec4(phong_color, 1.0);
     // FragColor = vec4((normal + 1)/2, 1.0);
     // FragColor = vec4(vec3(shadow), 1.0f);
 }

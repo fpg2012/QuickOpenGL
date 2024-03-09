@@ -9,12 +9,13 @@
 #include <cassert>
 #include <chrono>
 
+#include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#include <glad/glad.h>
 
 #include <glm/glm.hpp>
 
+#include "gltf_scene.hpp"
 #include "config.h"
 #include "shader.hpp"
 #include "shape.hpp"
@@ -23,7 +24,7 @@
 
 class QuickGLApplication {
 public: 
-	QuickGLApplication() { 
+	QuickGLApplication() {
 		_init_glfw();
 	}
 
@@ -33,21 +34,26 @@ public:
 	}
 
 	void main_loop() {
+		if (gltf_scene == nullptr) {
+			std::cerr << "no gltf scene" << std::endl;
+			exit(-1);
+		}
+
 		camera = Camera{
 			.fovy = glm::radians(45.0f),
 			.aspect = (float)viewport_width / viewport_height,
-			.pos = glm::vec3(-3.0f, .5f, 3.0f),
+			.pos = glm::vec3(1.5f, 1.5f, 1.0f),
 			.up = glm::vec3(.0f, 1.0f, .0f),
 		};
 
 		auto light = std::make_shared<PointLight>(PointLight{
-			.position = glm::vec3(-5.0f, .0f, .0f),
+			.position = glm::vec3(.0f, 5.0f, 3.0f),
 			.color = glm::vec3(1.0f),
-			.intensity = 20.0f,
+			.intensity = 30.0f,
 		});
 
 		Camera light_camera{
-			.fovy = glm::radians(60.0f),
+			.fovy = glm::radians(20.0f),
 			.aspect = (float)shadow_width / shadow_height,
 			.pos = light->position,
 			.up = glm::vec3(.0f, 1.0f, .0f),
@@ -61,9 +67,20 @@ public:
 
 		auto shader = create_shader_program("shader.vert", "shader.frag");
 
-		auto mat_earth = std::make_shared<PhongMaterial>(shader, tex_earth, light);
-		auto mat_moon = std::make_shared<PhongMaterial>(shader, tex_moon, light);
+		GLuint depth_map_fbo;
+		glGenFramebuffers(1, &depth_map_fbo);
+		auto shadow_map = std::make_shared<Texture>(depth_map_fbo, shadow_width, shadow_height);
+		// A framebuffer object however is not complete without a color buffer so we need to explicitly tell OpenGL we're not going to render any color data
+		glDrawBuffer(GL_NONE);
+		glReadBuffer(GL_NONE);
+		glEnable(GL_DEPTH_TEST);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind
+
+		auto mat_earth = std::make_shared<PhongMaterial>(shader, tex_earth, light, shadow_map);
+		auto mat_moon = std::make_shared<PhongMaterial>(shader, tex_moon, light, shadow_map);
 		auto mat_simple = std::make_shared<SimpleColorMaterial>(glm::vec3(1.0, 1.0, 1.0));
+
+		gltf_scene->init(shader, light, shadow_map);
 
 		Sphere sph = Sphere(1.0f);
 		Sphere sph2 = Sphere(0.1f);
@@ -71,22 +88,9 @@ public:
 
 		auto start_time = std::chrono::high_resolution_clock::now();
 
-		GLuint depth_map_fbo;
-		glGenFramebuffers(1, &depth_map_fbo);
-		auto shadow_map = std::make_shared<Texture>(depth_map_fbo, shadow_width, shadow_height);
-		mat_earth->shadow_map = shadow_map;
-		mat_moon->shadow_map = shadow_map;
-
-		// A framebuffer object however is not complete without a color buffer so we need to explicitly tell OpenGL we're not going to render any color data
-		glDrawBuffer(GL_NONE);
-		glReadBuffer(GL_NONE);
-		glEnable(GL_DEPTH_TEST);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind
-
 		glm::vec4 temp(light->position[0], light->position[1], light->position[2], 1.0f);
 		glm::vec4 cam_pos_ori(camera.pos, 1.0f);
 
-		glCullFace(GL_BACK);
 		glEnable(GL_DEPTH_TEST);
 
 		while (!glfwWindowShouldClose(window))
@@ -94,12 +98,12 @@ public:
 			auto now_time = std::chrono::high_resolution_clock::now();
 			float t = std::chrono::duration_cast<std::chrono::duration<float>>(now_time - start_time).count();
 
-			glm::vec4 temp2 = temp;
-			temp2 = glm::rotate(glm::mat4(1.0f), glm::sin(t) / 4, glm::vec3(0, 0, -1.0f)) * temp;
-			light->position[0] = temp2[0] / temp2.w;
-			light->position[1] = temp2[1] / temp2.w;
-			light->position[2] = temp2[2] / temp2.w;
-			light->light_cam.pos = light->position;
+			// glm::vec4 temp2 = temp;
+			// temp2 = glm::rotate(glm::mat4(1.0f), glm::sin(t) / 4, glm::vec3(0, 0, -1.0f)) * temp;
+			// light->position[0] = temp2[0] / temp2.w;
+			// light->position[1] = temp2[1] / temp2.w;
+			// light->position[2] = temp2[2] / temp2.w;
+			// light->light_cam.pos = light->position;
 
 			/*glm::vec4 cam_pos_temp = cam_pos_ori;
 			cam_pos_temp = glm::rotate(glm::mat4(1.0f), 0.4f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f)) * cam_pos_temp;
@@ -108,17 +112,24 @@ public:
 			camera.pos[2] = cam_pos_temp[2] / cam_pos_temp.w;*/
 
 			sph.model = glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f));
-			sph2.model = glm::rotate(glm::mat4(1.0f), 2.0f * 15.0f / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f))
-				* glm::translate(glm::mat4(1.0f), glm::vec3(0.0, 0.0, 2.0f))
+			sph2.model = glm::rotate(glm::mat4(1.0f), 6.0f * t / (2.0f * 3.14f), glm::vec3(.0f, .0f, 1.0f))
+				* glm::translate(glm::mat4(1.0f), glm::vec3(0.0, 2.0, .0f))
 				* glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f));
 			light_sph.model = glm::translate(glm::mat4(1.0f), light->position);
+			gltf_scene->update_matrix(
+				glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f))
+				 * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f))
+			);
 
+			glDepthMask(GL_TRUE);
 			glViewport(0, 0, shadow_width, shadow_height);
 			glBindFramebuffer(GL_FRAMEBUFFER, depth_map_fbo);
 			glClear(GL_DEPTH_BUFFER_BIT);
+			glCullFace(GL_FRONT);
 			// draw
-			sph.draw(light->light_cam, mat_simple);
-			sph2.draw(light->light_cam, mat_simple);
+			// sph.draw(light->light_cam, mat_simple);
+			// sph2.draw(light->light_cam, mat_simple);
+			gltf_scene->render(light->light_cam, mat_simple);
 			GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 			if (status != GL_FRAMEBUFFER_COMPLETE) {
 				std::cerr << "fb error: " << status << std::endl;
@@ -127,10 +138,13 @@ public:
 
 			glViewport(0, 0, viewport_width, viewport_height);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			
-			sph.draw(camera, mat_earth);
-			sph2.draw(camera, mat_moon);
-			light_sph.draw(camera, mat_simple);
+			glCullFace(GL_BACK);
+			// sph.draw(camera, mat_earth);
+			// sph2.draw(camera, mat_moon);
+			// light_sph.draw(light->light_cam, mat_simple);
+
+			gltf_scene->render(camera);
+
 			glfwSwapBuffers(window);
 			glfwPollEvents(); 
 		}
@@ -144,6 +158,10 @@ public:
 		return shader;
 	}
 
+	void load_scene(const std::string &filename) {
+		gltf_scene = std::make_shared<GLTFScene>(filename);
+	}
+
 	static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 		glViewport(0, 0, width, height);
 		auto app = reinterpret_cast<QuickGLApplication*>(glfwGetWindowUserPointer(window));
@@ -152,11 +170,26 @@ public:
 		app->viewport_height = height;
 		std::cout << "resize: " << width << ", " << height << std::endl;
 	}
+
+	static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+	{
+		auto app = reinterpret_cast<QuickGLApplication*>(glfwGetWindowUserPointer(window));
+		std::cout << xoffset << ", " << yoffset << std::endl;
+		std::cout << app->camera.fovy << std::endl;
+		if (yoffset < 0) {
+			app->camera.fovy = std::min(glm::radians(87.0f), app->camera.fovy + 0.1f);
+		}
+		else if (yoffset > 0) {
+			app->camera.fovy = std::max(glm::radians(3.0f), app->camera.fovy - 0.1f);
+		}
+	}
+
 private:
 	GLFWwindow* window;
 	Camera camera;
-	GLuint viewport_width = 1920, viewport_height = 1080;
-	GLuint shadow_width = 3072, shadow_height = 3072;
+	GLuint viewport_width = 1080, viewport_height = 720;
+	GLuint shadow_width = 2048, shadow_height = 2048;
+	std::shared_ptr<GLTFScene> gltf_scene = nullptr;
 
 	void _init_glfw() {
 		if (!glfwInit()) {
@@ -165,7 +198,8 @@ private:
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		glfwWindowHint(GLFW_SAMPLES, 8);
+		// glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+		// glfwWindowHint(GLFW_SAMPLES, 4);
 		window = glfwCreateWindow(viewport_width, viewport_height, "QuickOpenGL", NULL, NULL);
 		glfwSetWindowUserPointer(window, this);
 		if (!window) {
@@ -178,15 +212,33 @@ private:
 		}
 
 		glfwSetFramebufferSizeCallback(window, QuickGLApplication::framebuffer_size_callback);
+		glfwSetScrollCallback(window, QuickGLApplication::scroll_callback);
 		glViewport(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
-		glClearColor(0.025f, 0.05f, 0.1f, 1.0f);
-		glEnable(GL_MULTISAMPLE);
+		// glClearColor(0.025f, 0.05f, 0.1f, 1.0f);
+		glClearColor(0.27f, 0.27f, 0.3f, 1.0f);
+		// glEnable(GL_MULTISAMPLE);
+		glfwSwapInterval(1);
+
+		// GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+		// if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+		// {
+    	// 	// 初始化调试输出 
+		// 	std::cout << "init debug context" << std::endl;
+		// }
+
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 	}
 };
 
-int main()
+int main(int argc, char **argv)
 {
+	std::string filename = "resource/forest_house/scene.gltf";
+	if (argc >= 2) {
+		filename = argv[1];
+	}
 	QuickGLApplication app;
+	app.load_scene(filename);
 	app.main_loop();
 	return 0;
 }

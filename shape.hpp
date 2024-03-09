@@ -123,6 +123,8 @@ public:
 		glEnableVertexAttribArray(1);
 		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
 		glEnableVertexAttribArray(2);
+
+		// glDeleteBuffers(1, &vbo);
 	}
 
 	void draw(const Camera &cam, std::shared_ptr<Material> material) override {

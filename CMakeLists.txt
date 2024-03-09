@@ -15,12 +15,14 @@ add_subdirectory("glfw")
 include_directories("glad/include")
 set(GLAD_SRC "glad/src/glad.c")
 
-set(MY_HEADERS shader.hpp utils.hpp shape.hpp config.h utils.hpp camera.hpp material.hpp light.hpp texture.hpp)
+set(MY_HEADERS shader.hpp utils.hpp shape.hpp config.h utils.hpp camera.hpp material.hpp light.hpp texture.hpp gltf_scene.hpp)
+set(TINY_GLTF_SRC tiny_gltf.h json.hpp)
+set(STB_SRC stb_image_write.h stb_image.h)
 
 add_subdirectory("glm")
 
 # Add source to this project's executable.
-add_executable (QuickOpenGL "QuickOpenGL.cpp" ${MY_HEADERS} ${GLAD_SRC})
+add_executable (QuickOpenGL "QuickOpenGL.cpp" ${MY_HEADERS} ${GLAD_SRC} ${STB_SRC} ${TINY_GLTF_SRC})
 target_link_libraries(QuickOpenGL glfw glm::glm-header-only)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)

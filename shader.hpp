@@ -27,7 +27,8 @@ public:
 		source = ss.str();
 		ifs.close();
 
-		std::cerr << std::endl << filename << ", length: " << len << std::endl << source << std::endl;
+		std::cerr << std::endl << filename << ", length: " << len << std::endl;
+		// std::cerr << source << std::endl;
 
 		const char* source_c = source.c_str();
 		init(source_c, type);
