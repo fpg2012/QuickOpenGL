@@ -1,4 +1,6 @@
-﻿#include <iostream>
+﻿#include "glm/geometric.hpp"
+#include "glm/matrix.hpp"
+#include <iostream>
 #include <stdexcept>
 #include <array>
 #include <algorithm>
@@ -91,6 +93,10 @@ public:
 		glm::vec4 temp(light->position[0], light->position[1], light->position[2], 1.0f);
 		glm::vec4 cam_pos_ori(camera.pos, 1.0f);
 
+		gltf_scene->update_matrix(
+			glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f))
+		);
+
 		glEnable(GL_DEPTH_TEST);
 
 		while (!glfwWindowShouldClose(window))
@@ -111,15 +117,11 @@ public:
 			camera.pos[1] = cam_pos_temp[1] / cam_pos_temp.w;
 			camera.pos[2] = cam_pos_temp[2] / cam_pos_temp.w;*/
 
-			sph.model = glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f));
-			sph2.model = glm::rotate(glm::mat4(1.0f), 6.0f * t / (2.0f * 3.14f), glm::vec3(.0f, .0f, 1.0f))
-				* glm::translate(glm::mat4(1.0f), glm::vec3(0.0, 2.0, .0f))
-				* glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f));
-			light_sph.model = glm::translate(glm::mat4(1.0f), light->position);
-			gltf_scene->update_matrix(
-				glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f))
-				 * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f, 10.0f))
-			);
+			// sph.model = glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f));
+			// sph2.model = glm::rotate(glm::mat4(1.0f), 6.0f * t / (2.0f * 3.14f), glm::vec3(.0f, .0f, 1.0f))
+			// 	* glm::translate(glm::mat4(1.0f), glm::vec3(0.0, 2.0, .0f))
+			// 	* glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f));
+			// light_sph.model = glm::translate(glm::mat4(1.0f), light->position);
 
 			glDepthMask(GL_TRUE);
 			glViewport(0, 0, shadow_width, shadow_height);
@@ -174,13 +176,65 @@ public:
 	static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 	{
 		auto app = reinterpret_cast<QuickGLApplication*>(glfwGetWindowUserPointer(window));
-		std::cout << xoffset << ", " << yoffset << std::endl;
-		std::cout << app->camera.fovy << std::endl;
 		if (yoffset < 0) {
 			app->camera.fovy = std::min(glm::radians(87.0f), app->camera.fovy + 0.1f);
 		}
 		else if (yoffset > 0) {
 			app->camera.fovy = std::max(glm::radians(3.0f), app->camera.fovy - 0.1f);
+		}
+	}
+
+	static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+	{
+		auto app = reinterpret_cast<QuickGLApplication*>(glfwGetWindowUserPointer(window));
+    	if (key == GLFW_KEY_W && action == GLFW_PRESS) {
+			glm::vec3 delta = glm::vec3(.0f, .0f, -0.1f);
+			app->camera.pos += glm::transpose(glm::mat3(app->camera.view())) * delta;
+		} else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+			glm::vec3 delta = glm::vec3(.0f, .0f, 0.1f);
+			app->camera.pos += glm::transpose(glm::mat3(app->camera.view())) * delta;
+		}
+	}
+
+	static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
+	{
+		auto app = reinterpret_cast<QuickGLApplication*>(glfwGetWindowUserPointer(window));
+		if (app->left_pressed) {
+			float delta_xpos = xpos - app->xpos;
+			glm::mat3 rotate = glm::mat3(glm::rotate(glm::mat4(1.0f), -delta_xpos / app->viewport_width * 2, glm::vec3(.0f, 1.0f, .0f)));
+			app->camera.pos = rotate * app->old_cam.pos;
+		} else if (app->middle_pressed) {
+			// screen to camera
+			glm::vec3 move_camera_space((xpos - app->xpos) / app->viewport_width * 2, -(ypos - app->ypos) / app->viewport_height * 2, .0f);
+			glm::vec3 move_ndc_space = glm::transpose(glm::mat3(app->old_cam.view())) * move_camera_space;
+
+			app->camera.look_at = app->old_cam.look_at - move_ndc_space;
+			app->camera.pos = app->old_cam.pos - move_ndc_space;
+		} else {
+			app->xpos = xpos;
+			app->ypos = ypos;
+		}
+	}
+
+	static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+	{
+		auto app = reinterpret_cast<QuickGLApplication*>(glfwGetWindowUserPointer(window));
+    	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+			app->left_pressed = true;
+			app->old_cam = app->camera;
+		}
+		if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+			app->middle_pressed = true;
+			app->old_cam = app->camera;
+		}
+
+		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+			app->left_pressed = false;
+		}
+		if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_RELEASE) {
+			if (app->middle_pressed) {
+				app->middle_pressed = false;
+			}
 		}
 	}
 
@@ -190,6 +244,9 @@ private:
 	GLuint viewport_width = 1080, viewport_height = 720;
 	GLuint shadow_width = 2048, shadow_height = 2048;
 	std::shared_ptr<GLTFScene> gltf_scene = nullptr;
+	bool left_pressed = false, middle_pressed = false;
+	Camera old_cam;
+	double xpos, ypos;
 
 	void _init_glfw() {
 		if (!glfwInit()) {
@@ -199,7 +256,7 @@ private:
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		// glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-		// glfwWindowHint(GLFW_SAMPLES, 4);
+		glfwWindowHint(GLFW_SAMPLES, 4);
 		window = glfwCreateWindow(viewport_width, viewport_height, "QuickOpenGL", NULL, NULL);
 		glfwSetWindowUserPointer(window, this);
 		if (!window) {
@@ -213,6 +270,10 @@ private:
 
 		glfwSetFramebufferSizeCallback(window, QuickGLApplication::framebuffer_size_callback);
 		glfwSetScrollCallback(window, QuickGLApplication::scroll_callback);
+		glfwSetCursorPosCallback(window, QuickGLApplication::cursor_position_callback);
+		glfwSetMouseButtonCallback(window, QuickGLApplication::mouse_button_callback);
+		glfwSetKeyCallback(window, QuickGLApplication::key_callback);
+
 		glViewport(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
 		// glClearColor(0.025f, 0.05f, 0.1f, 1.0f);
 		glClearColor(0.27f, 0.27f, 0.3f, 1.0f);

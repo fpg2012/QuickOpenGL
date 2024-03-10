@@ -100,7 +100,7 @@ void main()
     //     gl_FragDepth = 1.0f;
     // }
     float shadow = 0.0f;
-    float bias = 0.0005f;  
+    float bias = 0.001f;  
     if (recvShadow != 0) {
         shadow = shadowCalc(pos_light_space, bias);
     }
