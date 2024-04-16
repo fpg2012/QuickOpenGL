@@ -1,5 +1,6 @@
 #pragma once
 
+#include <initializer_list>
 #include <vector>
 #include <glad/glad.h>
 #include <iostream>
@@ -57,5 +58,35 @@ public:
 	void use(GLenum texture = GL_TEXTURE0) {
 		glActiveTexture(texture);
 		glBindTexture(GL_TEXTURE_2D, handle);
+	}
+};
+
+class CubeMapTexture {
+public:
+	GLuint handle;
+
+	// right, left, up, down, back, front
+	CubeMapTexture(std::array<const char*, 6> &&filenames) {
+		stbi_set_flip_vertically_on_load(true);
+		glGenTextures(1, &handle);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, handle);
+
+		int width, height, nrChannels;
+		std::array<unsigned char*, 6> data;
+		for (int i = 0; i < 6; ++i) {
+			unsigned char* data_1 = stbi_load(filenames[i], &width, &height, &nrChannels, 0);
+			data[i] = data_1;
+		}
+
+		for (int i = 0; i < 6; ++i) {
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data[i]);
+		}
+
+		glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+	}
+
+	void use(GLenum texture = GL_TEXTURE0) {
+		glActiveTexture(texture);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, handle);
 	}
 };

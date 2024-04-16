@@ -68,7 +68,7 @@ float shadowCalc(vec3 p_light_space, float bias) {
     float shadow = 0.0f;
     // shadow = compareDepth(p.xy, current_depth, bias);
 
-    int sample_steps = 5;
+    int sample_steps = 8;
     float step_size = 10.0f / 1024 / (sample_steps * 2);
     int cnt = 0;
 
@@ -100,7 +100,7 @@ void main()
     //     gl_FragDepth = 1.0f;
     // }
     float shadow = 0.0f;
-    float bias = 0.001f;  
+    float bias = 0.0005f;  
     if (recvShadow != 0) {
         shadow = shadowCalc(pos_light_space, bias);
     }

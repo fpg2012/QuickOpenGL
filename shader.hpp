@@ -34,6 +34,10 @@ public:
 		init(source_c, type);
 	}
 
+	Shader(const char* source, GLenum type, int) {
+		init(source, type);
+	}
+
 	~Shader() {
 		if (success == GL_TRUE) {
 			glDeleteShader(handle);

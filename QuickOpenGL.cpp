@@ -1,14 +1,8 @@
-﻿#include "glm/geometric.hpp"
-#include "glm/matrix.hpp"
-#include <iostream>
+﻿#include <iostream>
 #include <stdexcept>
-#include <array>
 #include <algorithm>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <memory>
-#include <cassert>
 #include <chrono>
 
 #include <glad/glad.h>
@@ -16,6 +10,7 @@
 #include <GLFW/glfw3.h>
 
 #include <glm/glm.hpp>
+#include "glm/matrix.hpp"
 
 #include "gltf_scene.hpp"
 #include "config.h"
@@ -23,6 +18,8 @@
 #include "shape.hpp"
 #include "camera.hpp"
 #include "light.hpp"
+#include "framebuffer.hpp"
+#include "skybox.hpp"
 
 class QuickGLApplication {
 public: 
@@ -44,7 +41,7 @@ public:
 		camera = Camera{
 			.fovy = glm::radians(45.0f),
 			.aspect = (float)viewport_width / viewport_height,
-			.pos = glm::vec3(1.5f, 1.5f, 1.0f),
+			.pos = glm::vec3(-1.5f, 0.2f, -1.0f),
 			.up = glm::vec3(.0f, 1.0f, .0f),
 		};
 
@@ -69,14 +66,11 @@ public:
 
 		auto shader = create_shader_program("shader.vert", "shader.frag");
 
-		GLuint depth_map_fbo;
-		glGenFramebuffers(1, &depth_map_fbo);
-		auto shadow_map = std::make_shared<Texture>(depth_map_fbo, shadow_width, shadow_height);
+		Framebuffer depth_frame_buf;
+		depth_frame_buf.bind();
+		auto shadow_map = std::make_shared<Texture>(depth_frame_buf.handle, shadow_width, shadow_height);
 		// A framebuffer object however is not complete without a color buffer so we need to explicitly tell OpenGL we're not going to render any color data
-		glDrawBuffer(GL_NONE);
-		glReadBuffer(GL_NONE);
-		glEnable(GL_DEPTH_TEST);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind
+		depth_frame_buf.unbind();
 
 		auto mat_earth = std::make_shared<PhongMaterial>(shader, tex_earth, light, shadow_map);
 		auto mat_moon = std::make_shared<PhongMaterial>(shader, tex_moon, light, shadow_map);
@@ -87,6 +81,15 @@ public:
 		Sphere sph = Sphere(1.0f);
 		Sphere sph2 = Sphere(0.1f);
 		Sphere light_sph = Sphere(0.1f);
+
+		SkyBox skybox({
+			"resource/cloudy_0/bluecloud_ft.jpg",
+			"resource/cloudy_0/bluecloud_bk.jpg",
+			"resource/cloudy_0/bluecloud_dn.jpg",
+			"resource/cloudy_0/bluecloud_up.jpg",
+			"resource/cloudy_0/bluecloud_rt.jpg",
+			"resource/cloudy_0/bluecloud_lf.jpg",
+		});
 
 		auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -125,7 +128,7 @@ public:
 
 			glDepthMask(GL_TRUE);
 			glViewport(0, 0, shadow_width, shadow_height);
-			glBindFramebuffer(GL_FRAMEBUFFER, depth_map_fbo);
+			depth_frame_buf.bind();
 			glClear(GL_DEPTH_BUFFER_BIT);
 			glCullFace(GL_FRONT);
 			// draw
@@ -144,7 +147,8 @@ public:
 			// sph.draw(camera, mat_earth);
 			// sph2.draw(camera, mat_moon);
 			// light_sph.draw(light->light_cam, mat_simple);
-
+			
+			skybox.draw(camera);
 			gltf_scene->render(camera);
 
 			glfwSwapBuffers(window);
@@ -193,6 +197,8 @@ public:
 		} else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
 			glm::vec3 delta = glm::vec3(.0f, .0f, 0.1f);
 			app->camera.pos += glm::transpose(glm::mat3(app->camera.view())) * delta;
+		} else if (key == GLFW_KEY_ESCAPE) {
+			exit(0);
 		}
 	}
 
@@ -289,6 +295,7 @@ private:
 
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+        // glEnable(GL_FRAMEBUFFER_SRGB);
 	}
 };
 
