@@ -1,4 +1,5 @@
-﻿#include <iostream>
+﻿#include <cstdint>
+#include <iostream>
 #include <stdexcept>
 #include <algorithm>
 #include <string>
@@ -21,6 +22,10 @@
 #include "framebuffer.hpp"
 #include "skybox.hpp"
 
+#include "engine/rigid_body.hpp"
+#include "engine/simulation_engine.hpp"
+#include "engine/ode_solver.hpp"
+
 class QuickGLApplication {
 public: 
 	QuickGLApplication() {
@@ -38,6 +43,13 @@ public:
 			exit(-1);
 		}
 
+		// init physics engine
+		auto solver_ref = std::make_shared<ExplicitSolver<float, 13>>();
+    	auto engine = std::make_shared<Engine>(solver_ref);
+		glm::mat3 I0(5.0f);
+		I0[1][1] = 2.0f;
+    	uint64_t id = engine->add_body(glm::vec3(.0f), glm::quat(1.0f, glm::vec3(.0f)), glm::vec3(.0f), glm::vec3(0.f), I0, 12);
+
 		camera = Camera{
 			.fovy = glm::radians(45.0f),
 			.aspect = (float)viewport_width / viewport_height,
@@ -47,7 +59,7 @@ public:
 
 		auto light = std::make_shared<PointLight>(PointLight{
 			.position = glm::vec3(.0f, 5.0f, 3.0f),
-			.color = glm::vec3(1.0f),
+			.color = glm::vec3(.95f, .75, .35f),
 			.intensity = 30.0f,
 		});
 
@@ -83,12 +95,12 @@ public:
 		Sphere light_sph = Sphere(0.1f);
 
 		SkyBox skybox({
-			"resource/cloudy_0/bluecloud_ft.jpg",
-			"resource/cloudy_0/bluecloud_bk.jpg",
-			"resource/cloudy_0/bluecloud_dn.jpg",
-			"resource/cloudy_0/bluecloud_up.jpg",
-			"resource/cloudy_0/bluecloud_rt.jpg",
-			"resource/cloudy_0/bluecloud_lf.jpg",
+			"resource/cloudy_0/yellowcloud_ft.jpg",
+			"resource/cloudy_0/yellowcloud_bk.jpg",
+			"resource/cloudy_0/yellowcloud_dn.jpg",
+			"resource/cloudy_0/yellowcloud_up.jpg",
+			"resource/cloudy_0/yellowcloud_rt.jpg",
+			"resource/cloudy_0/yellowcloud_lf.jpg",
 		});
 
 		auto start_time = std::chrono::high_resolution_clock::now();
@@ -102,10 +114,27 @@ public:
 
 		glEnable(GL_DEPTH_TEST);
 
+		glm::mat4 scene_matrix = glm::scale(glm::mat4(1.0f), glm::vec3(0.3, 0.6, 0.3));
+
 		while (!glfwWindowShouldClose(window))
 		{
 			auto now_time = std::chrono::high_resolution_clock::now();
 			float t = std::chrono::duration_cast<std::chrono::duration<float>>(now_time - start_time).count();
+			if (t < 1.0f) {
+				Force force{glm::vec3(0.5, 0, 0) * 100.0f, glm::vec3(0, 0, 0.5f), id};
+				Force force2{-glm::vec3(0.5, 0, 0) * 100.0f, -glm::vec3(0, 0, 0.5f), id};
+    			engine->add_force(std::move(force));
+				engine->add_force(std::move(force2));
+			} else if (t > 10.0f) {
+				glm::mat3 rot = glm::toMat3(engine->bodies[id].q);
+				glm::vec3 exert_pos = engine->bodies[id].x + rot * glm::vec3(0, 2.0f, 0);
+				Force force{glm::vec3(0.5f, 0, 0) * 200.0f, exert_pos, id};
+				Force force2{-glm::vec3(0.5f, 0, 0) * 200.0f, -exert_pos, id};
+    			engine->add_force(std::move(force));
+				engine->add_force(std::move(force2));
+			}
+
+			engine->step(t - prev_t);
 
 			// glm::vec4 temp2 = temp;
 			// temp2 = glm::rotate(glm::mat4(1.0f), glm::sin(t) / 4, glm::vec3(0, 0, -1.0f)) * temp;
@@ -125,6 +154,11 @@ public:
 			// 	* glm::translate(glm::mat4(1.0f), glm::vec3(0.0, 2.0, .0f))
 			// 	* glm::rotate(glm::mat4(1.0f), 3.0f * t / (2.0f * 3.14f), glm::vec3(.0f, 1.0f, .0f));
 			// light_sph.model = glm::translate(glm::mat4(1.0f), light->position);
+			auto rotation = glm::toMat4(engine->bodies[id].q);
+			auto translation = glm::translate(glm::mat4(1.0f), engine->bodies[id].x);
+			std::cout << "x: " << engine->bodies[id].x.x << ", " << engine->bodies[id].x.y << ", " << engine->bodies[id].x.z << ", " << std::endl;
+			std::cout << "q: " << engine->bodies[id].q.w << ", " << engine->bodies[id].q.x << ", " << engine->bodies[id].x.y << ", " << engine->bodies[id].x.z << ", " << std::endl;
+			gltf_scene->matrix = translation * rotation * scene_matrix;
 
 			glDepthMask(GL_TRUE);
 			glViewport(0, 0, shadow_width, shadow_height);
@@ -152,7 +186,9 @@ public:
 			gltf_scene->render(camera);
 
 			glfwSwapBuffers(window);
-			glfwPollEvents(); 
+			glfwPollEvents();
+
+			prev_t = t;
 		}
 	}
 
@@ -253,6 +289,7 @@ private:
 	bool left_pressed = false, middle_pressed = false;
 	Camera old_cam;
 	double xpos, ypos;
+	float prev_t = .0f;
 
 	void _init_glfw() {
 		if (!glfwInit()) {
@@ -296,12 +333,14 @@ private:
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
         // glEnable(GL_FRAMEBUFFER_SRGB);
+
+		glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 	}
 };
 
 int main(int argc, char **argv)
 {
-	std::string filename = "resource/forest_house/scene.gltf";
+	std::string filename = "resource/BoxTextured.glb";
 	if (argc >= 2) {
 		filename = argv[1];
 	}
