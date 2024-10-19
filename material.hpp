@@ -9,13 +9,13 @@
 
 struct Material {
 	enum AlphaMode {
-		OPAQUE = 0,
-		MASK = 1,
-		BLEND = 2,
+		AM_OPAQUE = 0,
+		AM_MASK = 1,
+		AM_BLEND = 2,
 	};
-	Material(AlphaMode alpha_mode = OPAQUE) : alpha_mode(alpha_mode) { }
+	Material(AlphaMode alpha_mode = AM_OPAQUE) : alpha_mode(alpha_mode) { }
 	virtual void apply(glm::mat4 model, const Camera& cam) = 0;
-	AlphaMode alpha_mode = OPAQUE;
+	AlphaMode alpha_mode = AM_OPAQUE;
 };
 
 struct SimpleColorMaterial : Material {
@@ -63,7 +63,7 @@ struct PhongMaterial : Material {
 		std::shared_ptr<Texture> texture, 
 		std::shared_ptr<PointLight> light,
 		std::shared_ptr<Texture> shadow_map = nullptr,
-		AlphaMode alpha_mode = Material::OPAQUE,
+		AlphaMode alpha_mode = Material::AM_OPAQUE,
 		float phong_exponent = 32.0f, float k_ambient = .2f, float k_diffuse = 1.0f, float k_specular = 0.5f)
 	: shader_program(shader_program), texture(texture), light(light), shadow_map(shadow_map),
 		phong_exponent(phong_exponent), k_ambient(k_ambient), k_diffuse(k_diffuse), k_specular(k_specular),

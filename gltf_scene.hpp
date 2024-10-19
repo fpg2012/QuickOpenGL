@@ -130,9 +130,9 @@ void GLTFScene::init(std::shared_ptr<ShaderProgram> shader_program, std::shared_
 
 	for (tinygltf::Material& mat : model.materials) {
 		int texture_index = mat.pbrMetallicRoughness.baseColorTexture.index;
-		Material::AlphaMode alpha_mode = Material::OPAQUE;
+		Material::AlphaMode alpha_mode = Material::AM_OPAQUE;
 		if (mat.alphaMode == "BLEND") {
-			alpha_mode = Material::BLEND;
+			alpha_mode = Material::AM_BLEND;
 		} else {
 			std::cout << "alpha mode not support: " << mat.alphaMode << std::endl;
 		}
@@ -339,7 +339,7 @@ GLTFRenderQueue* GLTFRenderQueue::getInstance() {
 
 void GLTFRenderQueue::push(GLTFRenderRequest&& request) {
 	switch (request.material->alpha_mode) {
-	case Material::BLEND:
+	case Material::AM_BLEND:
 		blend_queue.push_back(request);
 		break;
 	default:
